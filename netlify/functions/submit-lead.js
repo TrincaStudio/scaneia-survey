@@ -1,4 +1,4 @@
-import { getSupabaseClient } from "./_supabase.js";
+const { getSupabaseClient } = require("./_supabase.js");
 
 const HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -39,7 +39,7 @@ function validatePayload(payload) {
   };
 }
 
-export async function handler(event) {
+async function handler(event) {
   if (event.httpMethod === "OPTIONS") {
     return json(200, {});
   }
@@ -83,3 +83,5 @@ export async function handler(event) {
 
   return json(200, { leadId: leadRow.id });
 }
+
+module.exports = { handler };

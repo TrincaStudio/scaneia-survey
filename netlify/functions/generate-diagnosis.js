@@ -1,5 +1,5 @@
-import { getSupabaseClient } from "./_supabase.js";
-import { Resend } from "resend";
+const { getSupabaseClient } = require("./_supabase.js");
+const { Resend } = require("resend");
 
 const HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -47,18 +47,27 @@ function formatContext(answers) {
 
 function normalizeDiagnosis(diagnosis) {
   const fallback = fallbackDiagnosis();
+  const legacyPainPoints = Array.isArray(diagnosis?.pain_points) ? diagnosis.pain_points : Array.isArray(diagnosis?.pontos_de_dor) ? diagnosis.pontos_de_dor : [];
+  const legacyOpportunities = Array.isArray(diagnosis?.oportunidades) ? diagnosis.oportunidades : [];
 
   return {
-    headline: normalizeText(diagnosis?.headline) || fallback.headline,
-    summary: normalizeText(diagnosis?.summary) || fallback.summary,
+    headline: normalizeText(diagnosis?.headline) || normalizeText(diagnosis?.title) || fallback.headline,
+    summary: normalizeText(diagnosis?.summary) || normalizeText(diagnosis?.resumo) || fallback.summary,
     painPoints: Array.isArray(diagnosis?.painPoints) && diagnosis.painPoints.length > 0
       ? diagnosis.painPoints.map((point, index) => ({
           title: normalizeText(point?.title) || fallback.painPoints[index % fallback.painPoints.length].title,
           desc: normalizeText(point?.desc) || fallback.painPoints[index % fallback.painPoints.length].desc,
         }))
+      : legacyPainPoints.length > 0
+        ? legacyPainPoints.map((point, index) => ({
+            title: normalizeText(point?.title) || normalizeText(point?.nome) || fallback.painPoints[index % fallback.painPoints.length].title,
+            desc: normalizeText(point?.desc) || normalizeText(point?.descricao) || fallback.painPoints[index % fallback.painPoints.length].desc,
+          }))
       : fallback.painPoints,
     opportunities: Array.isArray(diagnosis?.opportunities) && diagnosis.opportunities.length > 0
       ? diagnosis.opportunities.map((item) => normalizeText(item)).filter(Boolean)
+      : legacyOpportunities.length > 0
+        ? legacyOpportunities.map((item) => normalizeText(item)).filter(Boolean)
       : fallback.opportunities,
   };
 }
@@ -173,18 +182,51 @@ async function requestDiagnosisFromOpenAI({ leadId, answers }) {
     },
     body: JSON.stringify({
       model: "gpt-4o-mini",
-      response_format: { type: "json_object" },
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "diagnosis_result",
+          strict: true,
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["headline", "summary", "painPoints", "opportunities"],
+            properties: {
+              headline: { type: "string" },
+              summary: { type: "string" },
+              painPoints: {
+                type: "array",
+                minItems: 3,
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["title", "desc"],
+                  properties: {
+                    title: { type: "string" },
+                    desc: { type: "string" },
+                  },
+                },
+              },
+              opportunities: {
+                type: "array",
+                minItems: 3,
+                items: { type: "string" },
+              },
+            },
+          },
+        },
+      },
       messages: [
         {
           role: "system",
-          content: "Você gera diagnósticos comerciais em JSON válido, com headline, summary, painPoints e opportunities.",
+          content: "Você gera apenas um objeto JSON com headline, summary, painPoints e opportunities. Não use nenhum outro campo.",
         },
         {
           role: "user",
-          content: `Lead ID: ${leadId}\nRespostas: ${formatContext(answers)}`,
+          content: `Lead ID: ${leadId}\nRespostas: ${formatContext(answers)}\n\nRegras: seja específico ao contexto, mostre o travão principal, traga 3 pontos de dor e ao menos 3 oportunidades. Não escreva nada fora do JSON.`,
         },
       ],
-      temperature: 0.7,
+      temperature: 0.4,
     }),
   });
 
@@ -197,7 +239,7 @@ async function requestDiagnosisFromOpenAI({ leadId, answers }) {
   return JSON.parse(content);
 }
 
-export async function handler(event) {
+async function handler(event) {
   if (event.httpMethod === "OPTIONS") {
     return json(200, {});
   }
@@ -269,3 +311,5 @@ export async function handler(event) {
 
   return json(200, diagnosis);
 }
+
+module.exports = { handler };

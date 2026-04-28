@@ -51,15 +51,20 @@ function fallbackQuestion(answers, questionIndex) {
 
 function normalizeQuestion(question, answers, questionIndex) {
   const fallback = fallbackQuestion(answers, questionIndex);
-  const options = Array.isArray(question?.options) && question.options.length > 0 ? question.options : fallback.options;
+  const legacyQuestion = Array.isArray(question?.perguntas) && question.perguntas[0] ? question.perguntas[0] : null;
+  const options = Array.isArray(question?.options) && question.options.length > 0
+    ? question.options
+    : Array.isArray(legacyQuestion?.opcoes) && legacyQuestion.opcoes.length > 0
+      ? legacyQuestion.opcoes
+      : fallback.options;
 
   return {
-    label: normalizeText(question?.label) || fallback.label,
-    question: normalizeText(question?.question) || fallback.question,
+    label: normalizeText(question?.label) || normalizeText(question?.tema) || fallback.label,
+    question: normalizeText(question?.question) || normalizeText(question?.pergunta) || normalizeText(legacyQuestion?.pergunta) || fallback.question,
     options: options.map((option, index) => ({
       value: normalizeText(option?.value) || `opt_${index + 1}`,
-      label: normalizeText(option?.label) || `Opção ${index + 1}`,
-      sub: normalizeText(option?.sub || option?.description),
+      label: normalizeText(option?.label) || normalizeText(option?.texto) || `Opção ${index + 1}`,
+      sub: normalizeText(option?.sub || option?.description || option?.descricao),
     })),
   };
 }
@@ -79,23 +84,54 @@ async function requestQuestionFromOpenAI({ leadId, answers, questionIndex }) {
     },
     body: JSON.stringify({
       model: "gpt-4o-mini",
-      response_format: { type: "json_object" },
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "adaptive_question",
+          strict: true,
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["label", "question", "options"],
+            properties: {
+              label: { type: "string" },
+              question: { type: "string" },
+              options: {
+                type: "array",
+                minItems: 4,
+                maxItems: 4,
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["value", "label", "sub"],
+                  properties: {
+                    value: { type: "string" },
+                    label: { type: "string" },
+                    sub: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
       messages: [
         {
           role: "system",
-          content: "Você gera perguntas adaptativas de diagnóstico comercial em JSON válido.",
+          content: "Você gera apenas um objeto JSON com label, question e options. Não use nenhum outro campo.",
         },
         {
           role: "user",
-          content: `Lead ID: ${leadId}\nPergunta adaptativa número ${questionIndex}\nRespostas: ${JSON.stringify(answers)}`,
+          content: `Lead ID: ${leadId}\nPergunta adaptativa número ${questionIndex}\nRespostas: ${JSON.stringify(answers)}\n\nRegras: escreva uma pergunta única, objetiva e aprofundada; use exatamente 4 opções; não adicione texto fora do JSON.`,
         },
       ],
-      temperature: 0.7,
+      temperature: 0.4,
     }),
   });
 
   if (!response.ok) {
-    throw new Error("OpenAI request failed.");
+    const errorText = await response.text();
+    throw new Error(`OpenAI request failed: ${errorText}`);
   }
 
   const data = await response.json();
@@ -104,7 +140,7 @@ async function requestQuestionFromOpenAI({ leadId, answers, questionIndex }) {
   return JSON.parse(content);
 }
 
-export async function handler(event) {
+async function handler(event) {
   if (event.httpMethod === "OPTIONS") {
     return json(200, {});
   }
@@ -137,3 +173,5 @@ export async function handler(event) {
     return json(200, fallbackQuestion(answers, questionIndex));
   }
 }
+
+module.exports = { handler };
