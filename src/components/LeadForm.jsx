@@ -30,15 +30,7 @@ export default function LeadForm({ onSubmit, loading, error }) {
 	};
 
 	return (
-		<div className="fade-up intro-card" style={{ maxWidth: 560, width: "100%" }}>
-			<div className="tag" style={{ marginBottom: 18 }}>CAPTAÇÃO DE LEAD</div>
-			<h1 style={{ fontSize: "clamp(28px, 6vw, 40px)", lineHeight: 1.08, fontWeight: 800, marginBottom: 14 }}>
-				Antes de começar, me passa seus dados.
-			</h1>
-			<p style={{ color: "var(--muted)", lineHeight: 1.7, marginBottom: 28, fontSize: 15 }}>
-				O acesso ao diagnóstico é liberado depois do cadastro. Em seguida você entra na introdução atual do survey.
-			</p>
-
+		<div className="fade-up" style={{ width: "100%" }}>
 			<form className="lead-form" onSubmit={handleSubmit}>
 				<div className="input-grid">
 					<label>
@@ -62,7 +54,7 @@ export default function LeadForm({ onSubmit, loading, error }) {
 				{error && <div className="error-banner">{error}</div>}
 
 				<button className="cta-primary" type="submit" disabled={loading} style={{ width: "100%", justifyContent: "center" }}>
-					{loading ? "Enviando lead..." : "Liberar diagnóstico"}
+					{loading ? "Enviando lead..." : "Iniciar diagnóstico"}
 					<span>→</span>
 				</button>
 			</form>

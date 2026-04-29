@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 export default function GeneratingDiagnostic() {
 	const steps = [
 		"Cruzando respostas...",
-		"Identificando padrões de trava...",
+		"Identificando gargalos...",
 		"Mapeando alavancas de crescimento...",
 		"Gerando diagnóstico...",
 	];

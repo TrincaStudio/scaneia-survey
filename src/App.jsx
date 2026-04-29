@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import LeadForm from "./components/LeadForm.jsx";
 import Intro from "./components/Intro.jsx";
 import Question from "./components/Question.jsx";
 import LoadingQuestion from "./components/LoadingQuestion.jsx";
@@ -25,8 +24,72 @@ function fallbackAdaptiveQuestion(index) {
   };
 }
 
+function normalizeComparableText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isQuestionTooSimilar(currentQuestion, previousQuestion) {
+  const current = normalizeComparableText(currentQuestion);
+  const previous = normalizeComparableText(previousQuestion);
+
+  if (!current || !previous) {
+    return false;
+  }
+
+  if (current === previous) {
+    return true;
+  }
+
+  const currentTokens = current.split(" ").filter(Boolean);
+  const previousTokens = previous.split(" ").filter(Boolean);
+
+  if (currentTokens.length === 0 || previousTokens.length === 0) {
+    return false;
+  }
+
+  const previousTokenSet = new Set(previousTokens);
+  const sharedTokens = currentTokens.filter((token) => previousTokenSet.has(token)).length;
+  const overlapRatio = sharedTokens / Math.min(currentTokens.length, previousTokens.length);
+
+  return overlapRatio >= 0.7;
+}
+
+function buildDistinctAdaptiveQuestion(index, answers) {
+  const previousQuestion = answers?.adaptive_1?.question || "";
+
+  if (index === 1) {
+    const focus = answers?.adaptive_1?.answer || answers?.dor_principal || "operação";
+
+    return {
+      label: "ANÁLISE DE IMPACTO",
+      question:
+        focus === "financeiro"
+          ? "Além desse aperto, o que hoje mais pressiona caixa, margem ou previsibilidade?"
+          : focus === "comercial"
+            ? "Além da conversão, o que mais ficou travado depois das tentativas de ajuste?"
+            : focus === "equipe"
+              ? "Além da execução, onde a operação segue perdendo ritmo ou prioridade?"
+              : "Além da dor principal, qual impacto mais pesa no resultado hoje?",
+      options: [
+        { value: "impacto_caixa", label: "Pressão no caixa", sub: "Afeta previsibilidade e fôlego" },
+        { value: "impacto_receita", label: "Perda de receita", sub: "Segue limitando faturamento" },
+        { value: "impacto_equipe", label: "Ruído no time", sub: "Gera retrabalho e desalinhamento" },
+        { value: "impacto_prioridade", label: "Prioridade difusa", sub: "Consome energia sem avanço claro" },
+      ],
+      previousQuestion,
+    };
+  }
+
+  return fallbackAdaptiveQuestion(index);
+}
+
 function fallbackDiagnosis() {
   return {
+    fit: "partial",
     headline: "Negócio com potencial travado",
     summary: "Identificamos bloqueios claros no seu negócio que estão limitando o crescimento. A combinação de fatores comerciais e operacionais cria um ciclo que precisa ser quebrado com clareza estratégica.",
     painPoints: [
@@ -41,6 +104,8 @@ function fallbackDiagnosis() {
       "Novos mercados acessíveis com posicionamento claro",
       "Empresa preparada para crescer sem quebrar",
     ],
+    partialFitNote: "A dor declarada pode não ser exatamente o território de entrada da Trinca, mas existe uma camada digital por trás que merece ser tratada com precisão.",
+    noFitReason: "",
   };
 }
 
@@ -56,7 +121,7 @@ function buildAdaptiveAnswers(answers, question, answerValue, index) {
 }
 
 export default function App() {
-  const [phase, setPhase] = useState("lead");
+  const [phase, setPhase] = useState("intro");
   const [leadId, setLeadId] = useState("");
   const [leadError, setLeadError] = useState("");
   const [leadLoading, setLeadLoading] = useState(false);
@@ -101,14 +166,20 @@ export default function App() {
           return;
         }
 
+        const previousQuestion = adaptiveIndex > 0 ? adaptiveQuestions[adaptiveIndex - 1]?.question : "";
         const nextQuestion = {
           ...fallbackAdaptiveQuestion(adaptiveIndex),
           ...question,
         };
 
+        const safeQuestion =
+          adaptiveIndex === 1 && isQuestionTooSimilar(nextQuestion.question, previousQuestion)
+            ? buildDistinctAdaptiveQuestion(adaptiveIndex, answers)
+            : nextQuestion;
+
         setAdaptiveQuestions((current) => {
           const next = [...current];
-          next[adaptiveIndex] = nextQuestion;
+          next[adaptiveIndex] = safeQuestion;
           return next;
         });
       })
@@ -147,21 +218,12 @@ export default function App() {
       });
 
       setLeadId(response.leadId);
-      setPhase("intro");
+      setPhase("survey");
     } catch (error) {
       setLeadError(error.message || "Não foi possível capturar seu lead agora.");
     } finally {
       setLeadLoading(false);
     }
-  };
-
-  const handleStartSurvey = () => {
-    if (!leadId) {
-      setPhase("lead");
-      return;
-    }
-
-    setPhase("survey");
   };
 
   const handleInitialAnswer = (value) => {
@@ -229,18 +291,21 @@ export default function App() {
       <div className="app-shell">
         <div className="brand-row">
           <div className="brand-lockup">
-            <div className="brand-mark">
-              <span>S</span>
+            <div className="brand-mark" aria-label="Scaneia logo">
+              <img src="/logo-scaneia360.svg" alt="Scaneia" className="brand-logo" />
             </div>
-            <span className="brand-name">SCANEIA</span>
           </div>
 
           {phase === "survey" && <div className="mono brand-count">{totalAnswered} / {TOTAL_STEPS} respondidas</div>}
         </div>
 
-        {phase === "lead" && <LeadForm onSubmit={handleLeadSubmit} loading={leadLoading} error={leadError} />}
-
-        {phase === "intro" && <Intro onStart={handleStartSurvey} />}
+        {phase === "intro" && (
+          <Intro
+            onLeadSubmit={handleLeadSubmit}
+            leadLoading={leadLoading}
+            leadError={leadError}
+          />
+        )}
 
         {phase === "survey" && (
           <div className="content-shell">
@@ -270,7 +335,11 @@ export default function App() {
 
         {phase === "generating" && <GeneratingDiagnostic />}
 
-        {phase === "result" && <DiagnosticResult diagnosis={diagnosis} />}
+        {phase === "result" && (
+          <div className="content-shell">
+            <DiagnosticResult diagnosis={diagnosis} />
+          </div>
+        )}
       </div>
     </>
   );

@@ -22,6 +22,7 @@ function normalizeText(value) {
 
 function fallbackDiagnosis() {
   return {
+    fit: "partial",
     headline: "Negócio com potencial travado",
     summary: "Identificamos bloqueios claros no seu negócio que estão limitando o crescimento. A combinação de fatores comerciais e operacionais cria um ciclo que precisa ser quebrado com clareza estratégica.",
     painPoints: [
@@ -36,6 +37,8 @@ function fallbackDiagnosis() {
       "Novos mercados acessíveis com posicionamento claro",
       "Empresa preparada para crescer sem quebrar",
     ],
+    partialFitNote: "A dor declarada pode não ser exatamente o território de entrada da Trinca, mas existe uma camada digital por trás que merece ser tratada com precisão.",
+    noFitReason: "",
   };
 }
 
@@ -49,8 +52,10 @@ function normalizeDiagnosis(diagnosis) {
   const fallback = fallbackDiagnosis();
   const legacyPainPoints = Array.isArray(diagnosis?.pain_points) ? diagnosis.pain_points : Array.isArray(diagnosis?.pontos_de_dor) ? diagnosis.pontos_de_dor : [];
   const legacyOpportunities = Array.isArray(diagnosis?.oportunidades) ? diagnosis.oportunidades : [];
+  const fit = normalizeText(diagnosis?.fit) || fallback.fit;
 
   return {
+    fit: ["full", "partial", "none"].includes(fit) ? fit : fallback.fit,
     headline: normalizeText(diagnosis?.headline) || normalizeText(diagnosis?.title) || fallback.headline,
     summary: normalizeText(diagnosis?.summary) || normalizeText(diagnosis?.resumo) || fallback.summary,
     painPoints: Array.isArray(diagnosis?.painPoints) && diagnosis.painPoints.length > 0
@@ -69,6 +74,8 @@ function normalizeDiagnosis(diagnosis) {
       : legacyOpportunities.length > 0
         ? legacyOpportunities.map((item) => normalizeText(item)).filter(Boolean)
       : fallback.opportunities,
+      partialFitNote: normalizeText(diagnosis?.partialFitNote) || normalizeText(diagnosis?.partial_fit_note) || fallback.partialFitNote,
+      noFitReason: normalizeText(diagnosis?.noFitReason) || normalizeText(diagnosis?.no_fit_reason) || fallback.noFitReason,
   };
 }
 
@@ -190,8 +197,9 @@ async function requestDiagnosisFromOpenAI({ leadId, answers }) {
           schema: {
             type: "object",
             additionalProperties: false,
-            required: ["headline", "summary", "painPoints", "opportunities"],
+            required: ["fit", "headline", "summary", "painPoints", "opportunities", "partialFitNote", "noFitReason"],
             properties: {
+              fit: { type: "string", enum: ["full", "partial", "none"] },
               headline: { type: "string" },
               summary: { type: "string" },
               painPoints: {
@@ -212,6 +220,8 @@ async function requestDiagnosisFromOpenAI({ leadId, answers }) {
                 minItems: 3,
                 items: { type: "string" },
               },
+              partialFitNote: { type: "string" },
+              noFitReason: { type: "string" },
             },
           },
         },
@@ -219,11 +229,11 @@ async function requestDiagnosisFromOpenAI({ leadId, answers }) {
       messages: [
         {
           role: "system",
-          content: "Você gera apenas um objeto JSON com headline, summary, painPoints e opportunities. Não use nenhum outro campo.",
+          content: "Você gera apenas um objeto JSON com fit, headline, summary, painPoints, opportunities, partialFitNote e noFitReason. Não use nenhum outro campo.",
         },
         {
           role: "user",
-          content: `Lead ID: ${leadId}\nRespostas: ${formatContext(answers)}\n\nRegras: seja específico ao contexto, mostre o travão principal, traga 3 pontos de dor e ao menos 3 oportunidades. Não escreva nada fora do JSON.`,
+          content: `Lead ID: ${leadId}\nRespostas: ${formatContext(answers)}\n\nRegras: seja específico ao contexto, mostre o travão principal, defina primeiro o fit entre full, partial ou none, traga 3 pontos de dor e ao menos 3 oportunidades. Se fit for partial, preencha partialFitNote com a camada digital por trás da dor. Se fit for none, preencha noFitReason com a explicação honesta. Não escreva nada fora do JSON.`,
         },
       ],
       temperature: 0.4,
