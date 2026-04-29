@@ -104,6 +104,19 @@ a {
 	object-fit: contain;
 }
 
+.brand-trinca {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+}
+
+.brand-logo-trinca {
+	display: block;
+	height: 34px;
+	width: auto;
+	object-fit: contain;
+}
+
 .brand-name {
 	font-family: var(--font-brand);
 	font-size: 15px;
@@ -653,4 +666,22 @@ a {
 		transition-duration: 0.01ms !important;
 		scroll-behavior: auto !important;
 	}
+}
+
+.app-footer {
+	width: 100%;
+	max-width: 560px;
+	text-align: center;
+	padding: 40px 20px;
+	margin-top: auto;
+	border-top: 1px solid var(--border);
+}
+
+.app-footer p {
+	margin: 0;
+	font-family: var(--font-mono);
+	font-size: 11px;
+	color: var(--muted);
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
 }

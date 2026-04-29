@@ -296,6 +296,10 @@ export default function App() {
             </div>
           </div>
 
+          <div className="brand-trinca">
+            <img src="/trinca-logo.svg" alt="Trinca" className="brand-logo-trinca" />
+          </div>
+
           {phase === "survey" && <div className="mono brand-count">{totalAnswered} / {TOTAL_STEPS} respondidas</div>}
         </div>
 
@@ -340,6 +344,10 @@ export default function App() {
             <DiagnosticResult diagnosis={diagnosis} />
           </div>
         )}
+
+        <footer className="app-footer">
+          <p>© 2026 Trinca Studio</p>
+        </footer>
       </div>
     </>
   );
